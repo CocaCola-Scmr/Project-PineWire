@@ -1,16 +1,19 @@
-# React + Vite
+# PineWire Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+## Environment
 
-Currently, two official plugins are available:
+Copy [`.env.example`](.env.example) to `.env` if you want to change the backend address without editing code.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+```env
+VITE_BACKEND_ORIGIN=http://localhost:8001
+```
 
-## React Compiler
+## Running
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```powershell
+npm.cmd run dev
+```
 
-## Expanding the Oxlint configuration
+## Notes
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+The frontend reads the backend base URL from `VITE_BACKEND_ORIGIN` and derives both the HTTP and WebSocket endpoints from it. The backend CORS origin can also be configured with `PINEWIRE_FRONTEND_ORIGIN` or `PINEWIRE_FRONTEND_ORIGINS` if you run the app on a different port or host.

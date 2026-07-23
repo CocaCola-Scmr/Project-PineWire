@@ -1,16 +1,4 @@
-"""
-Reference data for capture_poc.py: which hostnames are background "noise"
-(telemetry/ads/SDKs/OS plumbing), and which known consumer apps/services a
-recognised hostname belongs to.
-
-This is a fixed, deterministic lookup - it can only recognise domains
-explicitly listed here. It will never be complete (see the note at the top
-of NOISE_KEYWORDS in capture_poc.py for why), but it's been made as wide as
-practical so that most common everyday apps get a friendly label instead of
-showing up as a wall of unfamiliar subdomains. Kept in its own file since
-it's just data, not filtering logic, and it's easiest to keep extending as
-one big list rather than mixed in with the capture/parsing code.
-"""
+"""Hostname labels and noise filters used by capture_poc.py."""
 
 # Domains commonly used for background telemetry, analytics, logging, app
 # "heartbeat" traffic, ad networks, CDN/asset infrastructure, or OS-level
@@ -19,17 +7,8 @@ one big list rather than mixed in with the capture/parsing code.
 # actual site/content a user was looking at. Matched as a substring, so a
 # keyword like "sentry.io" catches any subdomain of it too.
 
-# IMPORTANT LIMITATION: every app bundles its own mix of analytics/SDK
-# infrastructure (e.g. opening Reddit alone touched gql-fed.reddit.com,
-# w3-reporting.reddit.com, matrix.redditspace.com, graph.facebook.com, and
-# two different appsflyersdk.com subdomains - none of which the user
-# actually chose to visit). There is no way to hardcode a list that covers
-# every app's SDKs in advance - this is the exact same whack-a-mole problem
-# real ad/tracker blocklists (e.g. EasyList/EasyPrivacy) face, and why those
-# lists are maintained by large communities and updated constantly, and
-# still don't catch everything. The actual data lives in common_services.py
-# (kept separate since it's just a big data table, not filtering logic) and
-# has been made as wide as practical, but it will never be complete.
+# This stays intentionally broad. Apps and sites still rely on lots of shared
+# analytics, CDN and SDK hostnames, so the list will never be perfect.
 
 
 NOISE_KEYWORDS = (
@@ -46,8 +25,7 @@ NOISE_KEYWORDS = (
     # Background app syncs/telemetry unrelated to what the user is doing
     "appcenter.ms", "microsoftapp.net", "aria.microsoft", "edge.microsoft",
     "edge.skype", "config.office", "graph.microsoft.com",
-    # Mobile app SDKs for attribution/analytics/social login - embedded in
-    # a huge number of unrelated apps, not something a user directly uses
+    # Mobile app SDKs for attribution/analytics/social login.
     "graph.facebook.com", "appsflyersdk", "onelink.me",
     # Generic backend/API naming patterns (GraphQL federation, realtime
     # gateways, CDN config) - technical infrastructure jargon that real
@@ -60,9 +38,7 @@ NOISE_KEYWORDS = (
     "enterpriseregistration", "mobileappcommunicator",
     # Misc background messaging/test infrastructure seen during testing
     "edge-mqtt", "test-gateway", "newchatapi",
-    # Widely-used third-party crash reporting / analytics / feature-flag /
-    # attribution / push-notification SDKs, embedded across countless
-    # unrelated apps - none of this is "an app the user opened"
+    # Common third-party SDK and analytics providers.
     "sentry.io", "bugsnag", "statsig", "splunkcloud", "datadoghq",
     "newrelic", "amplitude", "mixpanel", "segment.io", "segment.com",
     "launchdarkly", "onesignal", "pusher.com", "airship.com",
@@ -71,10 +47,7 @@ NOISE_KEYWORDS = (
     "hotjar", "intercom.io", "braze.com", "iterable.com", "clevertap.com",
     "leanplum.com",
 
-    # --- OS/platform background plumbing (Android, iOS/macOS, Windows) ---
-    # None of this is "an app the user opened" - it's the operating system
-    # itself checking for internet, updates, push notifications, or time
-    # sync, which happens constantly and automatically on every device.
+    # OS/platform background plumbing (Android, iOS/macOS, Windows).
 
     # Android / Google Play services background checks
     "connectivitycheck", "clients3.google.com", "clients4.google.com",
@@ -102,22 +75,11 @@ NOISE_KEYWORDS = (
     "storeedgefd.dsx.mp.microsoft.com", "notify.windows.com",
     "wns.windows.com", "ctldl.windowsupdate.com",
 
-    # Windows Mobile Hotspot's internal DNS suffix. When a connected device
-    # looks up a bare/short hostname, Windows' DNS suffix search list will
-    # also silently retry it as "<hostname>.mshome.net" - this produces an
-    # exact duplicate of every single lookup, not a second real site, so it
-    # is always noise regardless of what precedes it.
+    # Windows Mobile Hotspot suffix. Bare hostnames get retried as
+    # "<hostname>.mshome.net", which is just a duplicate lookup.
     "mshome.net",
 
-    # --- Ad-tech / marketing-attribution / UX-analytics trackers ---
-    # An enormous share of commercial websites (B2B SaaS sites and review
-    # sites like G2/TechTarget especially) embed dozens of third-party
-    # real-time-bidding ad exchanges, identity-resolution, and marketing
-    # analytics vendors on every single page load. None of these are a
-    # site the user chose to visit - they are invisible passengers on
-    # whatever page was actually loaded. This list covers the major,
-    # well-known vendors in this industry (the same domains a browser
-    # tracker blocklist like EasyPrivacy would also block).
+    # Ad-tech / marketing / analytics trackers.
     "adsrvr.org", "bidswitch.net", "casalemedia.com", "rubiconproject.com",
     "openx.net", "3lift.com", "pubmatic.com", "rlcdn.com", "adnxs.com",
     "agkn.com", "tapad.com", "eyeota.net", "smartadserver.com", "adroll.com",
@@ -144,7 +106,8 @@ ORGANISATION_LABELS = {
     # Search / general web
     "google.com": "Google", "google.com.au": "Google",
     "bing.com": "Bing", "duckduckgo.com": "DuckDuckGo",
-    "yahoo.com": "Yahoo",
+    "yahoo.com": "Yahoo", "yandex.com": "Yandex",
+    "ecosia.org": "Ecosia", "brave.com": "Brave Search",
     # Social media
     "reddit.com": "Reddit", "redd.it": "Reddit", "redditmedia.com": "Reddit",
     "redditspace.com": "Reddit", "redditstatic.com": "Reddit",
@@ -158,11 +121,14 @@ ORGANISATION_LABELS = {
     "pinterest.com": "Pinterest", "pinimg.com": "Pinterest",
     "discord.com": "Discord", "discordapp.com": "Discord",
     "discordapp.net": "Discord", "tumblr.com": "Tumblr", "quora.com": "Quora",
+    "threads.net": "Threads", "threads.com": "Threads",
+    "beacons.ai": "Creator tools", "linktr.ee": "Linktree",
     # Messaging
     "whatsapp.net": "WhatsApp", "whatsapp.com": "WhatsApp",
     "telegram.org": "Telegram", "t.me": "Telegram", "signal.org": "Signal",
     "wechat.com": "WeChat", "weixin.qq.com": "WeChat", "line.me": "LINE",
-    "viber.com": "Viber", "kik.com": "Kik",
+    "viber.com": "Viber", "kik.com": "Kik", "messenger.com": "Messenger",
+    "skype.com": "Skype",
     # Streaming / media
     "youtube.com": "YouTube", "googlevideo.com": "YouTube", "ytimg.com": "YouTube",
     "netflix.com": "Netflix", "nflxvideo.net": "Netflix",
@@ -173,6 +139,11 @@ ORGANISATION_LABELS = {
     "soundcloud.com": "SoundCloud", "deezer.com": "Deezer", "hulu.com": "Hulu",
     "stan.com.au": "Stan", "binge.com.au": "Binge",
     "paramountplus.com": "Paramount+",
+    "primevideo.com": "Prime Video", "amazonvideo.com": "Prime Video",
+    "tubitv.com": "Tubi", "pluto.tv": "Pluto TV", "plex.tv": "Plex",
+    "vimeo.com": "Vimeo", "dailymotion.com": "Dailymotion",
+    "crunchyroll.com": "Crunchyroll", "hbomax.com": "Max",
+    "max.com": "Max", "bbc.co.uk": "BBC", "abc.net.au": "ABC News",
     # Shopping
     "amazon.com": "Amazon", "amazon.com.au": "Amazon",
     "ssl-images-amazon.com": "Amazon", "media-amazon.com": "Amazon",
@@ -182,13 +153,27 @@ ORGANISATION_LABELS = {
     "woolworths.com.au": "Woolworths", "coles.com.au": "Coles",
     "kmart.com.au": "Kmart", "bunnings.com.au": "Bunnings",
     "jbhifi.com.au": "JB Hi-Fi", "officeworks.com.au": "Officeworks",
+    "myer.com.au": "Myer", "davidjones.com": "David Jones",
+    "bigw.com.au": "BIG W", "theiconic.com.au": "THE ICONIC",
+    "catch.com.au": "Catch", "aldi.com.au": "ALDI", "ikea.com.au": "IKEA",
+    "kogan.com": "Kogan", "temu.com": "Temu", "shein.com": "SHEIN",
+    "costco.com.au": "Costco", "kmart.co.nz": "Kmart",
     # Finance
     "paypal.com": "PayPal", "venmo.com": "Venmo", "cash.app": "Cash App",
     "commbank.com.au": "CommBank", "nab.com.au": "NAB", "anz.com": "ANZ",
     "westpac.com.au": "Westpac", "up.com.au": "Up Bank",
     "afterpay.com": "Afterpay", "zip.co": "Zip",
+    "macquarie.com.au": "Macquarie", "bankwest.com.au": "Bankwest",
+    "stgeorge.com.au": "St.George", "boq.com.au": "Bank of Queensland",
+    "ing.com.au": "ING", "bendigobank.com.au": "Bendigo Bank",
+    "raiz.com.au": "Raiz", "wise.com": "Wise", "revolut.com": "Revolut",
+    "commsec.com.au": "CommSec", "stake.com": "Stake", "coinbase.com": "Coinbase",
+    "crypto.com": "Crypto.com", "robinhood.com": "Robinhood",
     # Maps / navigation
     "waze.com": "Waze", "here.com": "HERE Maps", "garmin.com": "Garmin",
+    "maps.apple.com": "Apple Maps", "mapquest.com": "MapQuest",
+    "maps.google.com": "Google Maps", "google.com/maps": "Google Maps",
+    "openstreetmap.org": "OpenStreetMap",
     # Productivity / work
     "notion.so": "Notion", "notion.com": "Notion",
     "slack.com": "Slack", "slack-edge.com": "Slack",
@@ -199,13 +184,30 @@ ORGANISATION_LABELS = {
     "dropbox.com": "Dropbox", "box.com": "Box", "evernote.com": "Evernote",
     "canva.com": "Canva", "figma.com": "Figma", "adobe.com": "Adobe",
     "grammarly.com": "Grammarly", "webex.com": "Webex",
+    "surveymonkey.com": "SurveyMonkey", "typeform.com": "Typeform",
+    "miro.com": "Miro", "lucid.app": "Lucid", "todoist.com": "Todoist",
+    "calendar.google.com": "Google Calendar", "meet.google.com": "Google Meet",
+    "docs.google.com": "Google Docs", "sheets.google.com": "Google Sheets",
+    "slides.google.com": "Google Slides", "drive.google.com": "Google Drive",
+    "mail.google.com": "Gmail", "one.google.com": "Google One",
+    "teams.microsoft.com": "Microsoft Teams", "officeapps.live.com": "Microsoft Office",
+    "onedrive.live.com": "OneDrive", "onenote.com": "OneNote",
+    "outlook.com": "Outlook", "outlook.office.com": "Outlook",
+    "sharepoint.com": "SharePoint", "confluence.com": "Confluence",
+    "atlassian.net": "Atlassian",
     # Dev/tech
     "github.com": "GitHub", "gitlab.com": "GitLab", "bitbucket.org": "Bitbucket",
     "stackoverflow.com": "Stack Overflow", "openai.com": "ChatGPT",
     "chatgpt.com": "ChatGPT", "claude.ai": "Claude", "claude.com": "Claude",
     "anthropic.com": "Claude", "npmjs.com": "npm",
+    "developer.android.com": "Android Developers", "developer.apple.com": "Apple Developer",
+    "mozilla.org": "Mozilla", "docker.com": "Docker", "kubernetes.io": "Kubernetes",
+    "python.org": "Python", "openjdk.org": "OpenJDK", "rust-lang.org": "Rust",
+    "golang.org": "Go", "nodejs.org": "Node.js",
     # Email
     "protonmail.com": "Proton Mail", "proton.me": "Proton Mail",
+    "mail.yahoo.com": "Yahoo Mail", "mail.google.com": "Gmail",
+    "outlook.live.com": "Outlook",
     # Gaming
     "steampowered.com": "Steam", "steamcontent.com": "Steam",
     "steamstatic.com": "Steam", "epicgames.com": "Epic Games",
@@ -213,6 +215,9 @@ ORGANISATION_LABELS = {
     "xbox.com": "Xbox", "xboxlive.com": "Xbox", "nintendo.com": "Nintendo",
     "roblox.com": "Roblox", "minecraft.net": "Minecraft", "ea.com": "EA",
     "riotgames.com": "Riot Games", "leagueoflegends.com": "League of Legends",
+    "battle.net": "Battle.net", "blizzard.com": "Blizzard",
+    "twitch.tv": "Twitch", "gog.com": "GOG", "ubisoft.com": "Ubisoft",
+    "play.google.com": "Google Play",
     # Travel / delivery / rideshare
     "uber.com": "Uber", "ubereats.com": "Uber Eats", "lyft.com": "Lyft",
     "doordash.com": "DoorDash", "menulog.com.au": "Menulog",
@@ -220,26 +225,56 @@ ORGANISATION_LABELS = {
     "booking.com": "Booking.com", "tripadvisor.com": "TripAdvisor",
     "expedia.com": "Expedia", "qantas.com": "Qantas",
     "jetstar.com": "Jetstar", "virginaustralia.com": "Virgin Australia",
+    "skyscanner.com.au": "Skyscanner", "trip.com": "Trip.com",
+    "rome2rio.com": "Rome2Rio", "redballoon.com.au": "RedBalloon",
+    "tripit.com": "TripIt", "airasia.com": "AirAsia",
     # Health / fitness
     "strava.com": "Strava", "fitbit.com": "Fitbit",
     "myfitnesspal.com": "MyFitnessPal", "headspace.com": "Headspace",
-    "calm.com": "Calm",
+    "calm.com": "Calm", "whoop.com": "WHOOP", "nike.com": "Nike",
+    "apple.com": "Apple services", "healthifyme.com": "HealthifyMe",
     # Education
     "duolingo.com": "Duolingo", "coursera.org": "Coursera",
     "khanacademy.org": "Khan Academy", "udemy.com": "Udemy",
+    "openlearning.com": "OpenLearning", "studentvip.com.au": "StudentVIP",
+    "canvas.instructure.com": "Canvas", "moodle.org": "Moodle",
+    "moodle.com": "Moodle", "blackboard.com": "Blackboard",
+    "edx.org": "edX", "futurelearn.com": "FutureLearn",
+    "unsw.edu.au": "UNSW", "student.unsw.edu.au": "UNSW",
+    "microsoft365.com": "Microsoft 365",
     # Dating
     "tinder.com": "Tinder", "bumble.com": "Bumble", "hinge.co": "Hinge",
     "okcupid.com": "OkCupid", "grindr.com": "Grindr",
     # Jobs / real estate
     "indeed.com": "Indeed", "seek.com.au": "Seek",
     "realestate.com.au": "realestate.com.au", "domain.com.au": "Domain",
+    "jora.com": "Jora", "zippia.com": "Zippia", "linkedin.com/jobs": "LinkedIn Jobs",
     # News / weather (AU-relevant)
     "abc.net.au": "ABC News", "news.com.au": "news.com.au",
+    "sbs.com.au": "SBS", "nine.com.au": "Nine", "7plus.com.au": "7plus",
+    "10play.com.au": "10 play", "smh.com.au": "Sydney Morning Herald",
+    "theage.com.au": "The Age", "afr.com": "Australian Financial Review",
+    "couriermail.com.au": "Courier-Mail", "dailytelegraph.com.au": "Daily Telegraph",
     "bom.gov.au": "Bureau of Meteorology", "weather.com": "Weather.com",
+    "bbc.com": "BBC", "cnn.com": "CNN", "reuters.com": "Reuters",
+    "apnews.com": "AP News", "theguardian.com": "The Guardian",
+    "nytimes.com": "The New York Times", "washingtonpost.com": "The Washington Post",
     # Phones/OS vendors' own app stores and services (recognisable "app"
     # activity, distinct from the OS background noise filtered out above)
     "samsungapps.com": "Samsung Galaxy Store",
-    "apple.com": "Apple services", "icloud.com": "iCloud",
+    "apple.com": "Apple services", "icloud.com": "iCloud", "itunes.com": "Apple services",
     "microsoft.com": "Microsoft services",
+    # Australia / local telco and utility brands
+    "telstra.com": "Telstra", "optus.com.au": "Optus",
+    "vodafone.com.au": "Vodafone Australia", "amaysim.com.au": "amaysim",
+    "boostmobile.com.au": "Boost Mobile", "tpg.com.au": "TPG",
+    "iinet.net.au": "iiNet", "aussiebroadband.com.au": "Aussie Broadband",
+    "superloop.com": "Superloop", "launtel.net.au": "Launtel",
+    "felixmobile.com.au": "felix mobile", "belong.com.au": "Belong",
+    "dodo.com": "Dodo", "spintel.net.au": "SpinTel",
+    "energyaustralia.com.au": "EnergyAustralia", "agl.com.au": "AGL",
+    "originenergy.com.au": "Origin Energy",
+    "service.nsw.gov.au": "Service NSW", "my.gov.au": "myGov",
+    "servicesaustralia.gov.au": "Services Australia",
 }
 ORG_DEDUP_WINDOW_SECONDS = 20

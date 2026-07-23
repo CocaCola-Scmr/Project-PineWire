@@ -16,3 +16,15 @@ Out of scope:
 - impersonating real Wi-Fi networks
 - forcing unsuspecting users to connect
 - exposing sensitive encrypted payloads
+
+# Setup
+
+## Frontend
+
+cd "C:\Users\naman\Desktop\Project PineWire\Project-PineWire\frontend"
+npm.cmd run dev
+
+## Backend
+
+$env:PINEWIRE_INTERFACE = "Local Area Connection\* 2"
+& "..\.venv\Scripts\python.exe" -m uvicorn main:app --reload --port 8001
