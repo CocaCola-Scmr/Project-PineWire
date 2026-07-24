@@ -133,6 +133,20 @@ def stop_capture():
     return {"status": "stopping"}
 
 
+@app.get("/api/devices")
+def get_devices():
+    capture_service: CaptureService = app.state.capture_service
+    return {"devices": capture_service.get_devices()}
+
+
+@app.get("/api/hotspot")
+def get_hotspot():
+    return {
+        "available": False,
+        "message": "Hotspot details are managed by Windows Settings.",
+    }
+
+
 @app.websocket("/ws/traffic")
 async def traffic_websocket(websocket: WebSocket):
     await connections.connect(websocket)

@@ -19,15 +19,45 @@ from capture_poc import (
 
 AppEventCallback = Callable[[dict], None]
 
+# Local domain suffixes to strip from hostnames
 _LOCAL_SUFFIXES = (".mshome.net", ".local", ".localdomain", ".internal", ".home", ".lan")
 
 
 def _strip_local_suffix(name: str) -> str:
-    lower = name.lower()
+    """Remove local domain suffixes from hostname."""
+    if not name:
+        return name
+    name_lower = name.lower()
     for suffix in _LOCAL_SUFFIXES:
-        if lower.endswith(suffix):
+        if name_lower.endswith(suffix):
             return name[: -len(suffix)]
     return name
+
+
+def _is_local_ip(ip: str) -> bool:
+    """Check if IP is on local/private network ranges."""
+    if not ip:
+        return False
+    parts = ip.split(".")
+    if len(parts) != 4:
+        return False
+    try:
+        octets = [int(p) for p in parts]
+    except ValueError:
+        return False
+    # 192.168.137.0/24 (hotspot range), 169.254.0.0/16 (link-local), 127.0.0.0/8 (loopback)
+    if octets[0] == 192 and octets[1] == 168 and octets[2] == 137:
+        return True
+    if octets[0] == 169 and octets[1] == 254:
+        return True
+    if octets[0] == 127:
+        return True
+    return False
+
+
+def _is_hotspot_host(ip: str) -> bool:
+    """The laptop owns the hotspot gateway address, so it is not a client."""
+    return ip == "192.168.137.1"
 
 
 class CaptureService:
@@ -44,6 +74,7 @@ class CaptureService:
         self._device_names_by_mac: dict[str, str] = {}
         self._device_labels_by_ip: dict[str, str] = {}
         self._device_labels_by_mac: dict[str, str] = {}
+        self._device_ips_by_mac: dict[str, str] = {}
 
     @property
     def is_running(self) -> bool:
@@ -52,6 +83,52 @@ class CaptureService:
     @property
     def interface_name(self) -> str | None:
         return self._interface_name
+
+    def get_devices(self) -> list[dict]:
+        """Return list of discovered devices with their info (excluding localhost and external servers)."""
+        devices: dict[str, dict] = {}
+        
+        # Build from observed client IPs, only if on local network.
+        for device_ip, device_name in self._device_names_by_ip.items():
+            if _is_local_ip(device_ip) and not _is_hotspot_host(device_ip):
+                clean_name = _strip_local_suffix(device_name) if device_name else None
+                devices[device_ip] = {"ip": device_ip, "name": clean_name, "label": None}
+        
+        # Add labels
+        for device_ip, device_label in self._device_labels_by_ip.items():
+            if _is_local_ip(device_ip) and not _is_hotspot_host(device_ip):
+                if device_ip not in devices:
+                    devices[device_ip] = {"ip": device_ip, "name": None, "label": device_label}
+                else:
+                    devices[device_ip]["label"] = device_label
+
+        # DHCP often gives us a device name by MAC before it gives us a usable IP.
+        for device_mac, device_ip in self._device_ips_by_mac.items():
+            if not _is_local_ip(device_ip) or _is_hotspot_host(device_ip):
+                continue
+            device = devices.setdefault(
+                device_ip,
+                {"ip": device_ip, "name": None, "label": None},
+            )
+            name = self._device_names_by_mac.get(device_mac)
+            label = self._device_labels_by_mac.get(device_mac)
+            if name and not device["name"]:
+                device["name"] = _strip_local_suffix(name)
+            if label and not device["label"]:
+                device["label"] = label
+
+        # Reverse DNS is useful on Windows, but must not run in _handle_packet.
+        for device_ip, device in devices.items():
+            if not device["name"]:
+                resolved_name = self._resolve_windows_name(device_ip)
+                if resolved_name:
+                    device["name"] = _strip_local_suffix(resolved_name)
+                    self._device_names_by_ip[device_ip] = device["name"]
+        
+        return sorted(
+            devices.values(),
+            key=lambda d: d.get("name") or d.get("label") or d["ip"]
+        )
 
     def start(self, interface_name: str) -> None:
         if self.is_running:
@@ -83,13 +160,16 @@ class CaptureService:
             return
 
         self._remember_device_name_from_dhcp(packet)
+        
+        # Track the source IP as a device on the network
+        source_ip = packet[IP].src
+        if not _is_local_ip(source_ip) or _is_hotspot_host(source_ip):
+            return
+        source_mac = self._source_mac(packet)
+        self._remember_device_by_ip(source_ip, source_mac)
 
         if packet.haslayer(DNS):
             _remember_dns_answers(packet[DNS])
-
-        source_ip = packet[IP].src
-        destination_ip = packet[IP].dst
-        source_mac = self._source_mac(packet)
 
         if packet.haslayer(DNSQR) and packet[DNS].qr == 0:
             hostname = packet[DNSQR].qname.decode(errors="ignore").rstrip(".")
@@ -101,6 +181,7 @@ class CaptureService:
 
         tcp = packet[TCP]
         if tcp.flags == "S":
+            destination_ip = packet[IP].dst
             self._emit_app_event(
                 source_ip,
                 source_mac,
@@ -135,22 +216,40 @@ class CaptureService:
         dhcp_options = packet[DHCP].options
         device_name = self._dhcp_hostname(dhcp_options)
         device_label = self._dhcp_device_label(dhcp_options)
+        device_ip = getattr(bootp, "yiaddr", "") or getattr(bootp, "ciaddr", "")
         if not device_name:
             if not device_label:
                 return
 
         if device_mac:
+            if device_ip and device_ip != "0.0.0.0":
+                self._device_ips_by_mac[device_mac] = device_ip
             if device_name:
                 self._device_names_by_mac[device_mac] = device_name
             if device_label:
                 self._device_labels_by_mac[device_mac] = device_label
 
-        device_ip = getattr(bootp, "yiaddr", "") or getattr(bootp, "ciaddr", "")
         if device_ip and device_ip != "0.0.0.0":
             if device_name:
                 self._device_names_by_ip[device_ip] = device_name
             if device_label:
                 self._device_labels_by_ip[device_ip] = device_label
+
+    def _remember_device_by_ip(self, device_ip: str, device_mac: str | None) -> None:
+        """Track a client without blocking packet capture on reverse DNS."""
+        if (
+            not device_ip
+            or device_ip == "0.0.0.0"
+            or not _is_local_ip(device_ip)
+            or _is_hotspot_host(device_ip)
+        ):
+            return
+
+        # Keep the IP visible even when DHCP/name resolution gives us no label.
+        self._device_names_by_ip.setdefault(device_ip, "")
+        if device_mac:
+            self._device_ips_by_mac[device_mac] = device_ip
+            self._device_names_by_mac.setdefault(device_mac, "")
 
     def _dhcp_hostname(self, options) -> str | None:
         for option in options:
@@ -164,7 +263,7 @@ class CaptureService:
                     value = value[-1]
                 hostname = str(value).strip().rstrip(".")
                 if hostname and hostname.lower() not in {"none", "null"}:
-                    return hostname
+                    return _strip_local_suffix(hostname)
         return None
 
     def _dhcp_device_label(self, options) -> str | None:
@@ -202,11 +301,13 @@ class CaptureService:
 
     def _device_name_for(self, device_ip: str, device_mac: str | None) -> str | None:
         if device_mac and device_mac in self._device_names_by_mac:
-            return self._device_names_by_mac[device_mac]
+            name = self._device_names_by_mac[device_mac]
+            if name:
+                return _strip_local_suffix(name)
         device_name = self._device_names_by_ip.get(device_ip)
         if device_name:
-            return device_name
-        return self._resolve_windows_name(device_ip)
+            return _strip_local_suffix(device_name)
+        return None
 
     def _resolve_windows_name(self, device_ip: str) -> str | None:
         """Try names Windows can learn outside the captured packet stream."""
