@@ -245,7 +245,7 @@ function Dashboard() {
         <div className="brand">
           <img className="brand-logo" src={pinewireLogo} alt="PineWire logo" />
           <div>
-            <p className="eyebrow">Network monitor</p>
+            <p className="eyebrow">Educational network monitor</p>
             <h1>PineWire</h1>
           </div>
         </div>

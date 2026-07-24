@@ -41,8 +41,8 @@ function WelcomePage() {
         </h1>
 
         <p className="welcome-subtitle">
-          A hands-on look at network monitoring — see what your devices connect
-          to and whether that traffic is encrypted, in real time.
+          A hands-on educational demo, where you get to play the other side.
+          Step behind the curtain and run the hotspot yourself...
         </p>
 
         <ul className="welcome-concepts" aria-label="Topics covered">
