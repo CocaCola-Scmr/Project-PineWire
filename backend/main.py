@@ -10,6 +10,8 @@ from pydantic import BaseModel
 from scapy.arch.windows import get_windows_if_list
 
 from capture_service import CaptureService
+import subprocess
+from typing import Optional
 
 
 DEFAULT_FRONTEND_ORIGINS = {
@@ -141,9 +143,54 @@ def get_devices():
 
 @app.get("/api/hotspot")
 def get_hotspot():
+    """Attempt to detect Mobile Hotspot / Wi‑Fi interface and SSID on Windows.
+
+    This is best-effort: Windows sometimes hides Mobile Hotspot details
+    behind system settings. We call `netsh wlan show interfaces` and
+    fall back to a helpful message when parsing fails.
+    """
+    # Try to read the wireless interface info via netsh
+    try:
+        result = subprocess.run(
+            ["netsh", "wlan", "show", "interfaces"],
+            capture_output=True,
+            text=True,
+            timeout=1,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return {"available": False, "message": "Hotspot details are managed by Windows Settings."}
+
+    out = (result.stdout or "").splitlines()
+    ssid: Optional[str] = None
+    iface_name: Optional[str] = None
+    state: Optional[str] = None
+    for line in out:
+        # lines look like: "    State                   : connected" or "    SSID                   : MyHotspot"
+        if ":" not in line:
+            continue
+        key, val = [s.strip() for s in line.split(":", 1)]
+        low = key.lower()
+        if low == "ssid":
+            ssid = val or None
+        elif low in ("name", "interface name", "interface"):
+            iface_name = val or None
+        elif low == "state":
+            state = val or None
+
+    if ssid:
+        return {
+            "available": True,
+            "ssid": ssid,
+            "interface": iface_name,
+            "state": state,
+            "message": "Hotspot / Wi‑Fi info detected.",
+        }
+
+    # If we didn't find an SSID, return a simple message guiding the user.
     return {
         "available": False,
-        "message": "Hotspot details are managed by Windows Settings.",
+        "message": "Hotspot details are managed by Windows Settings. Please enable Mobile Hotspot and connect a device.",
     }
 
 

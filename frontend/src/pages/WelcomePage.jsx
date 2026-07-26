@@ -3,13 +3,6 @@ import { useNavigate } from "react-router-dom";
 import "./WelcomePage.css";
 import pinewireLogo from "../assets/logo.png";
 
-const CONCEPTS = [
-  "Man-in-the-Middle attacks",
-  "Rogue access points",
-  "Encryption",
-  "Live packet traffic",
-];
-
 function WelcomePage() {
   const navigate = useNavigate();
   const [isLeaving, setIsLeaving] = useState(false);
@@ -44,12 +37,6 @@ function WelcomePage() {
           A hands-on educational demo, where you get to play the other side.
           Step behind the curtain and run the hotspot yourself...
         </p>
-
-        <ul className="welcome-concepts" aria-label="Topics covered">
-          {CONCEPTS.map((c) => (
-            <li key={c}>{c}</li>
-          ))}
-        </ul>
 
         <button
           type="button"

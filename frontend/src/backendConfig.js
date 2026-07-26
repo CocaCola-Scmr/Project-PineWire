@@ -1,4 +1,5 @@
-const DEFAULT_BACKEND_ORIGIN = "http://localhost:8001";
+// Default backend origin for local development. The README uses port 8000.
+const DEFAULT_BACKEND_ORIGIN = "http://localhost:8000";
 
 const backendUrl = new URL(
   import.meta.env.VITE_BACKEND_ORIGIN ?? DEFAULT_BACKEND_ORIGIN,
