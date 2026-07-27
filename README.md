@@ -21,7 +21,28 @@ Out of scope:
 
 ### What you need to do:
 
-- Install Npcap (Windows packet-capture driver): download https://nmap.org/npcap/ and run the installer as Administrator — required to capture raw Wi‑Fi traffic.
+- Prerequisites (install once):
+
+- Install Python 3.11+ and `pip` (Windows Store or python.org). Verify:
+
+```powershell
+python --version
+pip --version
+```
+
+- Install Node.js (LTS) which includes `npm`. Verify:
+
+```powershell
+node --version
+npm --version
+```
+
+- Optional: use `python -m venv .venv` to create an isolated Python environment for the backend (recommended).
+
+- Note about WSL / Windows: The packet capture and hotspot-detection parts require a native Windows environment and the Npcap driver. WSL does not provide Npcap or reliable Windows `netsh` output, so run the backend on native Windows when you need to capture real Wi‑Fi traffic.
+
+- Turn ON Mobile Hotspot: Settings → Network & internet → Mobile hotspot.
+- Install Npcap (Windows packet-capture driver): download https://nmap.org/npcap/ and run the installer as Administrator — required to capture raw Wi‑Fi traffic. In the installer, check the box for "Support raw 802.11ac traffic (and monitor mode) for wireless adapters"
 - Turn ON Mobile Hotspot: Settings → Network & internet → Mobile hotspot.
 - Connect at least one phone/tablet to that hotspot so Windows keeps it active.
 - Open two PowerShell windows: one for the backend and one for the frontend.
