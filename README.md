@@ -84,7 +84,9 @@ If the app doesn't show hotspot/adapter info
 
 ### Finding the correct adapter (beginner-friendly)
 
-If PineWire can't detect the adapter automatically, here's how to find it using either the Windows Settings GUI or PowerShell.
+Note: The correct adapter will generally be something like `Microsoft Wi‑Fi Direct Virtual Adapter #2`. Select this adapter in advanced settings of the network tap and click start capture. Attempt trial and error with any other similarly named adapters until you can see a live indicator at the top of the screen and traffic is picked up.
+
+If still not working, here's how to find it using either the Windows Settings GUI or PowerShell.
 
 - GUI (recommended for beginners):
   1.  Open **Settings** → **Network & internet** → **Mobile hotspot**. Make sure Mobile Hotspot is turned on.
