@@ -179,13 +179,31 @@ def get_hotspot():
             state = val or None
 
     if ssid:
-        return {
+        # Try to map the reported interface name to the scapy/windows interface list
+        scapy_iface = None
+        try:
+            windows_ifaces = get_windows_if_list()
+            low_iface = (iface_name or "").lower()
+            for interface in windows_ifaces:
+                # match either by exact name/description or by substring (case-insensitive)
+                name = (interface.get("name") or "").lower()
+                desc = (interface.get("description") or "").lower()
+                if low_iface and (low_iface == name or low_iface == desc or low_iface in name or low_iface in desc or name in low_iface or desc in low_iface):
+                    scapy_iface = interface.get("name")
+                    break
+        except Exception:
+            scapy_iface = None
+
+        resp = {
             "available": True,
             "ssid": ssid,
             "interface": iface_name,
             "state": state,
             "message": "Hotspot / Wi‑Fi info detected.",
         }
+        if scapy_iface:
+            resp["scapy_interface"] = scapy_iface
+        return resp
 
     # If we didn't find an SSID, return a simple message guiding the user.
     return {

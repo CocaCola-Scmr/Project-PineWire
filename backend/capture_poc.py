@@ -7,6 +7,8 @@ the hotspot adapter are working before relying on the dashboard.
 
 import re
 import time
+import argparse
+import threading
 
 from scapy.all import sniff, IP, TCP, Raw, DNS, DNSQR
 from scapy.arch.windows import get_windows_if_list
@@ -181,11 +183,101 @@ def _show_if_recognised(device_ip, hostname):
     print(f"{device_ip} is using {org}")
 
 
+# Debug / verbose packet counting
+_PACKET_COUNT = 0
+_PACKET_COUNT_LOCK = threading.Lock()
+VERBOSE = False
+
+
+def _pps_reporter():
+    """Background thread that prints packets-per-second once per second."""
+    global _PACKET_COUNT
+    while True:
+        time.sleep(1)
+        with _PACKET_COUNT_LOCK:
+            cnt = _PACKET_COUNT
+            _PACKET_COUNT = 0
+        print(f"[pps] {cnt} packets/s")
+
+
+def _handle_packet_verbose(packet):
+    """Wrapper for sniff() that optionally prints each packet and counts PPS.
+
+    The original, human-friendly event printing is still produced by
+    `describe_packet()`. When `--verbose` is passed the script will also
+    print one-line summaries for every captured packet and a PPS metric.
+    """
+    global _PACKET_COUNT
+    with _PACKET_COUNT_LOCK:
+        _PACKET_COUNT += 1
+
+    def _label_for(ip_addr: str) -> str:
+        """Return a readable label for an IP if available, otherwise the IP.
+
+        Uses learned DNS answers stored in `_ip_to_hostname`. If a hostname
+        maps to a known organisation (via `_organisation_for`) include the
+        organisation label for readability.
+        """
+        if not ip_addr:
+            return ""
+        name = _ip_to_hostname.get(ip_addr)
+        if name:
+            org = _organisation_for(name)
+            return f"{org} ({name})" if org else name
+        return ip_addr
+
+    if VERBOSE:
+        try:
+            if packet.haslayer(IP):
+                src = packet[IP].src
+                dst = packet[IP].dst
+                src_label = _label_for(src)
+                dst_label = _label_for(dst)
+
+                # Classify packets into a short human-friendly event type
+                evt = "IP"
+                if packet.haslayer(DNS):
+                    evt = "DNS"
+                elif packet.haslayer(Raw) and packet.haslayer(TCP):
+                    tcp = packet[TCP]
+                    payload = bytes(packet[Raw].load)
+                    if tcp.dport == 80 and payload.startswith(HTTP_METHODS):
+                        evt = "HTTP"
+                    elif tcp.dport == 443:
+                        evt = "TLS"
+                    else:
+                        evt = f"TCP:{tcp.sport}->{tcp.dport}"
+
+                print(f"{time.time():.3f} {src_label} -> {dst_label} [{evt}]")
+            else:
+                # Non-IP packet fallback
+                print(f"{time.time():.3f} {packet.summary()}")
+        except Exception:
+            print(f"{time.time():.3f} <packet>")
+
+    # Keep the original, filtered behaviour (recognised app/org events)
+    describe_packet(packet)
+
+
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="POC packet sniffer for PineWire")
+    parser.add_argument("-i", "--interface", help="Interface name to sniff on")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Print every packet and show PPS")
+    args = parser.parse_args()
+
     print("Available interfaces:")
     for iface in get_windows_if_list():
         print(f"- {iface['name']}  ({iface['description']})")
 
-    interface_name = input("\nInterface name to sniff on: ")
+    interface_name = args.interface or input("\nInterface name to sniff on: ")
+    VERBOSE = bool(args.verbose)
+
     print(f"\nSniffing on '{interface_name}'... connect a device now.\n")
-    sniff(iface=interface_name, prn=describe_packet, store=False)
+
+    # Start PPS reporter thread when verbose mode is requested so users can
+    # capture a screenshot of the packets-per-second metric.
+    if VERBOSE:
+        t = threading.Thread(target=_pps_reporter, daemon=True)
+        t.start()
+
+    sniff(iface=interface_name, prn=_handle_packet_verbose, store=False)
