@@ -21,6 +21,7 @@ Out of scope:
 
 ### What you need to do:
 
+- Install Npcap (Windows packet-capture driver): download https://nmap.org/npcap/ and run the installer as Administrator — required to capture raw Wi‑Fi traffic.
 - Turn ON Mobile Hotspot: Settings → Network & internet → Mobile hotspot.
 - Connect at least one phone/tablet to that hotspot so Windows keeps it active.
 - Open two PowerShell windows: one for the backend and one for the frontend.

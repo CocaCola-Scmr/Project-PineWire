@@ -3,6 +3,13 @@ import pinewireLogo from "../assets/logo.png";
 
 const TOUR_STEPS = [
   {
+    id: "intro",
+    selector: "main.dashboard-shell",
+    title: "Welcome to PineWire",
+    body: "To get the most out of this tour, connect a device or two to this hotspot (with their permission, of course!). You'll see their live activity as they use apps.",
+    highlight: true,
+  },
+  {
     id: "status-pills",
     selector: ".status-stack",
     title: "Your hotspot, at a glance",
@@ -46,9 +53,16 @@ export default function Tour({ onComplete }) {
   const targetRef = useRef(null);
 
   const step = TOUR_STEPS[currentStep];
+  const isIntroStep = step.id === "intro";
 
   useEffect(() => {
     const updatePositions = () => {
+      if (isIntroStep) {
+        // For intro, we don't highlight a specific element — just show as modal
+        setTargetRect(null);
+        return;
+      }
+
       const selector = step.selector;
       const element = document.querySelector(selector);
 
@@ -95,7 +109,7 @@ export default function Tour({ onComplete }) {
     updatePositions();
     window.addEventListener("resize", updatePositions);
     return () => window.removeEventListener("resize", updatePositions);
-  }, [step.selector]);
+  }, [step.selector, isIntroStep]);
 
   const handleNext = () => {
     if (currentStep < TOUR_STEPS.length - 1) {
@@ -109,55 +123,72 @@ export default function Tour({ onComplete }) {
     onComplete?.();
   };
 
-  if (!step || !targetRect) {
-    return null;
-  }
-
   const isLastStep = currentStep === TOUR_STEPS.length - 1;
 
   return (
     <>
-      {/* Spotlight overlay */}
+      {/* Dark overlay */}
       <div className="tour-overlay" aria-hidden="true">
-        <svg
-          className="tour-spotlight"
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            width: "100%",
-            height: "100%",
-            pointerEvents: "none",
-          }}
-        >
-          <defs>
-            <mask id="tour-mask">
-              <rect width="100%" height="100%" fill="white" />
-              <rect
-                x={targetRect.left - 4}
-                y={targetRect.top - 4}
-                width={targetRect.width + 8}
-                height={targetRect.height + 8}
-                fill="black"
-                rx="8"
-              />
-            </mask>
-          </defs>
-          <rect
-            width="100%"
-            height="100%"
-            fill="rgba(9, 12, 15, 0.7)"
-            mask="url(#tour-mask)"
+        {/* Only show spotlight SVG when not intro step */}
+        {targetRect && !isIntroStep && (
+          <svg
+            className="tour-spotlight"
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              width: "100%",
+              height: "100%",
+              pointerEvents: "none",
+            }}
+          >
+            <defs>
+              <mask id="tour-mask">
+                <rect width="100%" height="100%" fill="white" />
+                <rect
+                  x={targetRect.left - 4}
+                  y={targetRect.top - 4}
+                  width={targetRect.width + 8}
+                  height={targetRect.height + 8}
+                  fill="black"
+                  rx="8"
+                />
+              </mask>
+            </defs>
+            <rect
+              width="100%"
+              height="100%"
+              fill="rgba(9, 12, 15, 0.7)"
+              mask="url(#tour-mask)"
+            />
+          </svg>
+        )}
+
+        {/* Plain dark overlay for intro */}
+        {isIntroStep && (
+          <div
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: "rgba(9, 12, 15, 0.7)",
+              pointerEvents: "none",
+            }}
           />
-        </svg>
+        )}
 
         {/* Tooltip with pineapple logo */}
         <div
           className="tour-tooltip"
           style={{
             position: "fixed",
-            top: `${tooltipPos.top}px`,
-            left: `${tooltipPos.left}px`,
+            top: isIntroStep ? "50%" : `${tooltipPos.top}px`,
+            left: "50%",
+            transform: isIntroStep
+              ? "translate(-50%, -50%)"
+              : `translateX(-50%)`,
             width: "360px",
             maxWidth: "90vw",
             zIndex: 1001,

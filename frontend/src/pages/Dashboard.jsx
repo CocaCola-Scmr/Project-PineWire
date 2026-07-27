@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import "../App.css";
 import {
   BACKEND_HEALTH_URL,
@@ -73,6 +73,7 @@ function getEventDeviceName(event, devices) {
 
 function Dashboard() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("traffic");
   const [events, setEvents] = useState([]);
   const [connectionState, setConnectionState] = useState("connecting");
@@ -93,7 +94,8 @@ function Dashboard() {
     location.state?.fromOnboarding || false,
   );
   const adapterChangeInProgress = useRef(false);
-  const initialSelectedRef = useRef(true);
+  const programmaticSelectionRef = useRef(false);
+  const initialAutoStartRef = useRef(true);
   const captureStateRef = useRef(captureState);
 
   useEffect(() => {
@@ -102,8 +104,8 @@ function Dashboard() {
 
   // When the selected adapter changes, automatically start/restart capture so users don't have to
   useEffect(() => {
-    if (initialSelectedRef.current) {
-      initialSelectedRef.current = false;
+    if (programmaticSelectionRef.current) {
+      programmaticSelectionRef.current = false;
       return;
     }
 
@@ -227,51 +229,62 @@ function Dashboard() {
     return () => controller.abort();
   }, []);
 
-  // Load available interfaces for Network controls
+  // Load available interfaces for Network controls — re-run when hotspot info changes
   useEffect(() => {
     let cancelled = false;
     async function loadIfaces() {
       setInterfaceLoading(true);
-      let reportedInterface = hotspotInfo?.interface;
       try {
         const resp = await fetch(`${BACKEND_HTTP_ORIGIN}/api/interfaces`);
         if (!cancelled && resp.ok) {
           const list = await resp.json();
           setInterfacesList(list || []);
           if (list && list.length > 0) {
-            // Try to prefer the interface reported by /api/hotspot, if available.
-            try {
-              const hs = await fetch(`${BACKEND_HTTP_ORIGIN}/api/hotspot`);
-              if (hs.ok) {
-                const hotspot = await hs.json();
-                // keep hotspot info for UI decisions
-                setHotspotInfo(hotspot || null);
-                reportedInterface = hotspot?.interface || reportedInterface;
-                const ifaceName = hotspot?.interface || null;
-                // If hotspot reported an interface and it exists in the list, pick it.
-                if (ifaceName) {
-                  const match = list.find(
+            // If user already has a selection, keep it — don't override.
+            if (selectedInterface) {
+              // noop — user already has a selection
+            } else {
+              // Prefer interface reported by hotspot if present (prefer scapy mapping when available).
+              const ifaceName =
+                hotspotInfo?.scapy_interface || hotspotInfo?.interface || null;
+              if (ifaceName) {
+                const lower = String(ifaceName).toLowerCase();
+                const match =
+                  list.find((it) => it.name === ifaceName) ||
+                  list.find((it) => it.description === ifaceName) ||
+                  list.find(
+                    (it) => String(it.name || "").toLowerCase() === lower,
+                  ) ||
+                  list.find(
                     (it) =>
-                      it.name === ifaceName || it.description === ifaceName,
+                      String(it.description || "").toLowerCase() === lower,
+                  ) ||
+                  list.find((it) =>
+                    String(it.name || "")
+                      .toLowerCase()
+                      .includes(lower),
+                  ) ||
+                  list.find((it) =>
+                    String(it.description || "")
+                      .toLowerCase()
+                      .includes(lower),
                   );
-                  if (match) {
-                    setSelectedInterface(match.name);
-                  } else {
-                    setSelectedInterface(list[0].name);
-                  }
+
+                if (match) {
+                  programmaticSelectionRef.current = true;
+                  setSelectedInterface(match.name);
                 } else {
+                  programmaticSelectionRef.current = true;
                   setSelectedInterface(list[0].name);
                 }
               } else {
+                programmaticSelectionRef.current = true;
                 setSelectedInterface(list[0].name);
               }
-            } catch {
-              setSelectedInterface(list[0].name);
             }
-            // Keep advanced controls collapsed by default; do not auto-open
           }
         }
-      } catch {
+      } catch (e) {
         // ignore
       } finally {
         if (!cancelled) setInterfaceLoading(false);
@@ -281,7 +294,48 @@ function Dashboard() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [hotspotInfo]);
+
+  // Auto-start capture on first mount when we detect a hotspot and capture isn't running
+  useEffect(() => {
+    if (!initialAutoStartRef.current) return;
+    initialAutoStartRef.current = false;
+
+    if (
+      captureState.status !== "running" &&
+      hotspotAvailable &&
+      selectedInterface &&
+      !interfaceLoading
+    ) {
+      (async () => {
+        setStartLoading(true);
+        try {
+          await fetch(`${BACKEND_HTTP_ORIGIN}/api/capture/start`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ interface_name: selectedInterface }),
+          });
+          const h = await fetch(BACKEND_HEALTH_URL);
+          if (h.ok) {
+            const j = await h.json();
+            setCaptureState({
+              status: j.capture_running ? "running" : "stopped",
+              interfaceName: j.interface_name,
+            });
+          }
+        } catch (e) {
+          // ignore
+        } finally {
+          setStartLoading(false);
+        }
+      })();
+    }
+  }, [
+    hotspotAvailable,
+    selectedInterface,
+    interfaceLoading,
+    captureState.status,
+  ]);
 
   useEffect(() => {
     let socket;
@@ -376,6 +430,28 @@ function Dashboard() {
         ? "Backend down"
         : "Stopped";
 
+  const startBtnClass = `btn primary ${startLoading ? "loading" : ""} ${captureRunning ? "btn--running" : ""}`;
+  const startBtnLabel = startLoading
+    ? "Starting…"
+    : captureRunning
+      ? captureState.interfaceName
+        ? `Running on ${captureState.interfaceName}`
+        : "Running"
+      : "Start Capture";
+
+  const handleReplayFullTutorial = () => {
+    localStorage.removeItem("pinewire_tour_completed");
+    navigate("/onboarding");
+  };
+
+  const handleReplayInterfaceTour = () => {
+    setActiveTab("traffic");
+    setShowTour(false);
+    window.setTimeout(() => {
+      setShowTour(true);
+    }, 0);
+  };
+
   return (
     <>
       {showTour && (
@@ -448,6 +524,11 @@ function Dashboard() {
                   <p className="eyebrow">Live activity</p>
                   <h2 id="activity-heading">Recognised connections</h2>
                   <p className="subtle">Updated as traffic comes through.</p>
+                  <p className="subtle" style={{ marginTop: 6 }}>
+                    Note: PineWire may surface background system or app network
+                    activity — you may sometimes see app names even when not
+                    actively using them.
+                  </p>
                 </div>
               </div>
 
@@ -702,21 +783,147 @@ function Dashboard() {
           )}
 
           {activeTab === "learn" && (
-            <section className="activity-shell">
-              <div className="activity-header">
-                <div>
-                  <p className="eyebrow">Education</p>
-                  <h2>Learn</h2>
-                  <p className="subtle">
-                    Tutorials and explanations about what you&apos;re seeing.
-                  </p>
-                </div>
-              </div>
-              <div className="placeholder-panel">
-                <p className="placeholder-label">
-                  Tutorials and educational content coming soon.
+            <section className="learn-shell">
+              <div className="learn-header">
+                <p className="eyebrow">Learn</p>
+                <h2>Learn</h2>
+                <p className="subtle">
+                  Everything explained, whenever you want it.
                 </p>
               </div>
+
+              <section
+                className="learn-card"
+                aria-labelledby="learn-start-again"
+              >
+                <h3 id="learn-start-again">Start again</h3>
+                <div className="learn-actions">
+                  <button
+                    type="button"
+                    className="learn-action-btn"
+                    onClick={handleReplayFullTutorial}
+                  >
+                    <span className="learn-action-title">
+                      Replay the full tutorial
+                    </span>
+                    <span className="learn-action-copy">
+                      Go back through the story from the start.
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="learn-action-btn"
+                    onClick={handleReplayInterfaceTour}
+                  >
+                    <span className="learn-action-title">
+                      Replay the interface tour
+                    </span>
+                    <span className="learn-action-copy">
+                      Just the quick pointers around the dashboard.
+                    </span>
+                  </button>
+                </div>
+              </section>
+
+              <section
+                className="learn-card"
+                aria-labelledby="learn-staying-safe"
+              >
+                <h3 id="learn-staying-safe">Staying safe on real networks</h3>
+                <ul className="learn-list">
+                  <li>
+                    Check the network name carefully - rogue hotspots often use
+                    names like "Free_WiFi" or copy a real one nearby.
+                  </li>
+                  <li>
+                    Avoid logging into banking or sensitive accounts on public
+                    Wi-Fi when you can.
+                  </li>
+                  <li>
+                    Look for the lock - sites using HTTPS keep your traffic
+                    sealed, even on a dodgy network.
+                  </li>
+                  <li>
+                    A VPN seals your traffic in its own envelope, even over an
+                    unlocked connection.
+                  </li>
+                </ul>
+              </section>
+
+              <section className="learn-card" aria-labelledby="learn-terms">
+                <h3 id="learn-terms">Terms, explained simply</h3>
+                <dl className="learn-glossary">
+                  <div>
+                    <dt>Rogue access point</dt>
+                    <dd>
+                      A hotspot pretending to be normal, set up by someone who
+                      should not be watching.
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Man-in-the-Middle</dt>
+                    <dd>
+                      When someone sits between you and the internet, seeing
+                      what passes through.
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>HTTPS / HTTP</dt>
+                    <dd>
+                      Sealed envelope vs. postcard - one&apos;s private, one
+                      isn&apos;t.
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>DNS</dt>
+                    <dd>
+                      Basically, the internet&apos;s contacts list - it&apos;s
+                      how your device finds the right website.
+                    </dd>
+                  </div>
+                </dl>
+              </section>
+
+              <section className="learn-card" aria-labelledby="learn-faq">
+                <h3 id="learn-faq">Questions people actually ask</h3>
+                <dl className="learn-faq">
+                  <div>
+                    <dt>Why a pineapple?</dt>
+                    <dd>
+                      Real devices like this exist and are called Wi-Fi
+                      Pineapples - used by security folks (and sometimes
+                      attackers) to demonstrate exactly this kind of risk. This
+                      app is a safe, friendly version of one.
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Is this actually spying on me?</dt>
+                    <dd>
+                      No - it only sees devices that connect to this hotspot on
+                      purpose, and nothing is ever saved.
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Could someone do this to me for real?</dt>
+                    <dd>
+                      Yes - that is exactly why this exists. Real ones will not
+                      ask permission or look this friendly.
+                    </dd>
+                  </div>
+                </dl>
+              </section>
+
+              <section
+                className="learn-card"
+                aria-labelledby="learn-coming-soon"
+              >
+                <h3 id="learn-coming-soon">More on the way</h3>
+                <p className="learn-coming-soon">
+                  Got a question this did not answer? More content is coming
+                  soon.
+                </p>
+              </section>
             </section>
           )}
         </div>
